@@ -59,6 +59,7 @@ func (w *muxerFMP4) setTrack(trackID int) {
 
 func (w *muxerFMP4) writeSample(
 	dts int64,
+	sliceDts int64,
 	ptsOffset int32,
 	isNonSyncSample bool,
 	_ uint32,

@@ -349,7 +349,7 @@ func segmentFMP4SeekAndMuxParts(
 	duration time.Duration,
 	init *fmp4.Init,
 	m muxer,
-) (time.Duration, error) {
+) (time.Duration, int64, error) {
 	var segmentStartOffsetMP4 int64
 	var durationMP4 int64
 	moofOffset := uint64(0)
@@ -358,6 +358,8 @@ func segmentFMP4SeekAndMuxParts(
 	atLeastOnePartWritten := false
 	var timeScale uint32
 	var maxMuxerDTS time.Duration
+	var firstMuxerDTS int64
+	firstMuxerDTSRead := false
 	breakAtNextMdat := false
 
 	_, err := mp4.ReadBoxStructure(r, func(h *mp4.ReadHandle) (interface{}, error) {
@@ -392,6 +394,10 @@ func segmentFMP4SeekAndMuxParts(
 			timeScale = track.TimeScale
 			segmentStartOffsetMP4 = durationGoToMp4(segmentStartOffset, track.TimeScale)
 			durationMP4 = durationGoToMp4(duration, track.TimeScale)
+			if !firstMuxerDTSRead {
+				firstMuxerDTS = int64(tfdt.BaseMediaDecodeTimeV1)
+				firstMuxerDTSRead = true
+			}
 
 		case "trun":
 			box, _, err := h.ReadPayload()
@@ -401,16 +407,16 @@ func segmentFMP4SeekAndMuxParts(
 			trun := box.(*mp4.Trun)
 
 			dataOffset := moofOffset + uint64(trun.DataOffset)
-			muxerDTS := int64(tfdt.BaseMediaDecodeTimeV1) - segmentStartOffsetMP4
+			muxerDTS := int64(tfdt.BaseMediaDecodeTimeV1)
 			atLeastOneSampleWritten := false
 
 			for _, e := range trun.Entries {
-				if muxerDTS >= durationMP4 {
+				if muxerDTS - firstMuxerDTS - segmentStartOffsetMP4 >= durationMP4 {
 					breakAtNextMdat = true
 					break
 				}
 
-				if muxerDTS >= 0 {
+				if muxerDTS - segmentStartOffsetMP4 - firstMuxerDTS >= 0 {
 					atLeastOnePartWritten = true
 				}
 
@@ -419,6 +425,7 @@ func segmentFMP4SeekAndMuxParts(
 
 				err = m.writeSample(
 					muxerDTS,
+					firstMuxerDTS + segmentStartOffsetMP4,
 					e.SampleCompositionTimeOffsetV1,
 					(e.SampleFlags&sampleFlagIsNonSyncSample) != 0,
 					e.SampleSize,
@@ -448,7 +455,7 @@ func segmentFMP4SeekAndMuxParts(
 				m.writeFinalDTS(muxerDTS)
 			}
 
-			muxerDTSGo := durationMp4ToGo(muxerDTS, timeScale)
+			muxerDTSGo := durationMp4ToGo(muxerDTS - firstMuxerDTS - segmentStartOffsetMP4, timeScale)
 
 			if muxerDTSGo > maxMuxerDTS {
 				maxMuxerDTS = muxerDTSGo
@@ -462,24 +469,24 @@ func segmentFMP4SeekAndMuxParts(
 		return nil, nil
 	})
 	if err != nil && !errors.Is(err, errTerminated) {
-		return 0, err
+		return 0, firstMuxerDTS, err
 	}
 
 	if !atLeastOnePartWritten {
-		return 0, errNoSegmentsFound
+		return 0, firstMuxerDTS, errNoSegmentsFound
 	}
 
-	return maxMuxerDTS, nil
+	return maxMuxerDTS, firstMuxerDTS + segmentStartOffsetMP4, nil
 }
 
 func segmentFMP4MuxParts(
 	r readSeekerAt,
-	segmentStartOffset time.Duration,
+	firstDts int64,
 	duration time.Duration,
 	init *fmp4.Init,
 	m muxer,
 ) (time.Duration, error) {
-	var segmentStartOffsetMP4 int64
+	// var segmentStartOffsetMP4 int64
 	var durationMP4 int64
 	moofOffset := uint64(0)
 	var tfhd *mp4.Tfhd
@@ -518,7 +525,6 @@ func segmentFMP4MuxParts(
 
 			m.setTrack(int(tfhd.TrackID))
 			timeScale = track.TimeScale
-			segmentStartOffsetMP4 = durationGoToMp4(segmentStartOffset, track.TimeScale)
 			durationMP4 = durationGoToMp4(duration, track.TimeScale)
 
 		case "trun":
@@ -529,11 +535,11 @@ func segmentFMP4MuxParts(
 			trun := box.(*mp4.Trun)
 
 			dataOffset := moofOffset + uint64(trun.DataOffset)
-			muxerDTS := int64(tfdt.BaseMediaDecodeTimeV1) + segmentStartOffsetMP4
+			muxerDTS := int64(tfdt.BaseMediaDecodeTimeV1)
 			atLeastOneSampleWritten := false
 
 			for _, e := range trun.Entries {
-				if muxerDTS >= durationMP4 {
+				if muxerDTS - firstDts >= durationMP4 {
 					breakAtNextMdat = true
 					break
 				}
@@ -543,6 +549,7 @@ func segmentFMP4MuxParts(
 
 				err = m.writeSample(
 					muxerDTS,
+					0, // don't slice
 					e.SampleCompositionTimeOffsetV1,
 					(e.SampleFlags&sampleFlagIsNonSyncSample) != 0,
 					e.SampleSize,
@@ -572,7 +579,7 @@ func segmentFMP4MuxParts(
 				m.writeFinalDTS(muxerDTS)
 			}
 
-			muxerDTSGo := durationMp4ToGo(muxerDTS, timeScale)
+			muxerDTSGo := durationMp4ToGo(muxerDTS - firstDts, timeScale)
 
 			if muxerDTSGo > maxMuxerDTS {
 				maxMuxerDTS = muxerDTSGo

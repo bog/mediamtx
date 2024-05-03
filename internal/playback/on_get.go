@@ -65,7 +65,7 @@ func seekAndMux(
 
 		segmentStartOffset := start.Sub(segments[0].Start)
 
-		segmentMaxElapsed, err := segmentFMP4SeekAndMuxParts(f, segmentStartOffset, duration, firstInit, m)
+		segmentMaxElapsed, firstDts, err := segmentFMP4SeekAndMuxParts(f, segmentStartOffset, duration, firstInit, m)
 		if err != nil {
 			return err
 		}
@@ -92,7 +92,7 @@ func seekAndMux(
 			segmentStartOffset := seg.Start.Sub(start)
 
 			var segmentMaxElapsed time.Duration
-			segmentMaxElapsed, err = segmentFMP4MuxParts(f, segmentStartOffset, duration, firstInit, m)
+			segmentMaxElapsed, err = segmentFMP4MuxParts(f, firstDts, duration, firstInit, m)
 			if err != nil {
 				return err
 			}

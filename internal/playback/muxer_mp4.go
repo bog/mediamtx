@@ -48,13 +48,14 @@ func (w *muxerMP4) setTrack(trackID int) {
 
 func (w *muxerMP4) writeSample(
 	dts int64,
+	sliceDts int64,
 	ptsOffset int32,
 	isNonSyncSample bool,
 	payloadSize uint32,
 	getPayload func() ([]byte, error),
 ) error {
-	// remove GOPs before the GOP of the first frame
-	if (dts < 0 || (dts >= 0 && w.curTrack.lastDTS < 0)) && !isNonSyncSample {
+	// remove GOPs before the GOP of the requested slice
+	if (dts < sliceDts || (dts >= sliceDts && w.curTrack.lastDTS < sliceDts)) && !isNonSyncSample {
 		w.curTrack.Samples = nil
 	}
 

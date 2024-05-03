@@ -7,6 +7,7 @@ type muxer interface {
 	setTrack(trackID int)
 	writeSample(
 		dts int64,
+		sliceDts int64,
 		ptsOffset int32,
 		isNonSyncSample bool,
 		payloadSize uint32,
