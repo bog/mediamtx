@@ -89,8 +89,6 @@ func seekAndMux(
 				break
 			}
 
-			segmentStartOffset := seg.Start.Sub(start)
-
 			var segmentMaxElapsed time.Duration
 			segmentMaxElapsed, err = segmentFMP4MuxParts(f, firstDts, duration, firstInit, m)
 			if err != nil {
