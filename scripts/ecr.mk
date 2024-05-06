@@ -37,7 +37,7 @@ ecr-binaries:
 	temp sh -c "rm -rf /out/binaries && cp -r /s/binaries /out/"
 
 define DOCKERFILE_ECR
-FROM scratch
+FROM $(ALPINE_IMAGE)
 ARG TARGETPLATFORM
 ADD tmp/binaries/$$TARGETPLATFORM.tar.gz /
 RUN apk add --no-cache ffmpeg
