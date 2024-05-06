@@ -40,6 +40,7 @@ define DOCKERFILE_ECR
 FROM scratch
 ARG TARGETPLATFORM
 ADD tmp/binaries/$$TARGETPLATFORM.tar.gz /
+RUN apk add --no-cache ffmpeg
 ENTRYPOINT [ "/mediamtx" ]
 endef
 export DOCKERFILE_ECR
